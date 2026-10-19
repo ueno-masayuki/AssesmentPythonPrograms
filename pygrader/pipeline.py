@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,19 +28,49 @@ class StudentResult:
     score: ScoreBreakdown
     matched_worksheet: bool = True
     llm_error: str | None = None
+    # ルーブリックに乗らない特別ケース: "not_runnable"（エラーで実行できない）
+    # / "io_mismatch"（入出力が問題文と適合しない）。いずれも評点0。
+    special: str | None = None
+    special_note: str = ""
 
     def flags(self) -> list[str]:
         flags = list(self.submission.flags)
+        if self.special == "not_runnable":
+            flags.append("プログラムがエラーで実行できません（評点0）")
+        elif self.special == "io_mismatch":
+            flags.append("入出力が問題文と適合していません（評点0）")
         if not self.matched_worksheet:
             flags.append("ワークシートに対応する行が見つかりません（評点は手動で登録してください）")
         if self.llm_error:
             flags.append(f"LLM評価に失敗（テストのみで採点）: {self.llm_error}")
-        if self.outcome:
+        if self.outcome and self.special is None:
             if any(r.status == "timeout" for r in self.outcome.results):
                 flags.append("タイムアウトしたテストがあります")
             if any(r.status == "error" for r in self.outcome.results):
                 flags.append("実行時エラーのテストがあります")
         return flags
+
+
+def classify_special(code_text: str, outcome: RunOutcome | None) -> tuple[str | None, str]:
+    """ルーブリックに乗らない特別ケースを判定する。
+
+    - not_runnable: 構文エラー、または全テストが実行時エラー
+    - io_mismatch: 合格が0件で、タイムアウトはなく、出力不一致が1件以上
+      （プログラムは動くが入出力が問題文の指定と合っていない）
+    """
+    try:
+        ast.parse(code_text)
+    except SyntaxError as e:
+        return "not_runnable", f"構文エラー: {e.msg} ({e.lineno}行目)"
+    if outcome is not None and outcome.results:
+        statuses = [r.status for r in outcome.results]
+        if all(s == "error" for s in statuses):
+            note = next((r.detail for r in outcome.results if r.detail), "")
+            return "not_runnable", note
+        if (outcome.passed_count == 0 and "timeout" not in statuses
+                and "wrong_output" in statuses):
+            return "io_mismatch", ""
+    return None, ""
 
 
 @dataclass
@@ -117,11 +148,15 @@ def grade(
         outcome: RunOutcome | None = None
         evaluation = None
         llm_error = None
+        special: str | None = None
+        special_note = ""
         if sub.has_code:
             if assignment.tests:
                 outcome = run_tests(sub.code_text, assignment,
                                     filename=assignment.expected_filename or "main.py")
-            if llm_enabled:
+            special, special_note = classify_special(sub.code_text, outcome)
+            # 特別ケース（実行不能・入出力不適合）は評点0でLLM評価は行わない
+            if special is None and llm_enabled:
                 try:
                     evaluation = llm_mod.evaluate(assignment, sub.code_text, outcome,
                                                   cache_dir=cache_dir, use_cache=use_cache)
@@ -130,12 +165,12 @@ def grade(
                     llm_error = str(e)
 
         score = compute_score(assignment, outcome, evaluation, max_grade)
-        if not sub.has_code:
+        if not sub.has_code or special is not None:
             score.final_grade = 0.0
 
         results.append(StudentResult(
             submission=sub, outcome=outcome, evaluation=evaluation,
-            score=score, llm_error=llm_error,
+            score=score, llm_error=llm_error, special=special, special_note=special_note,
         ))
 
     if progress:

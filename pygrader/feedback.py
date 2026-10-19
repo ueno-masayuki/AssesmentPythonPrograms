@@ -25,18 +25,27 @@ def build_feedback_text(assignment: Assignment, res: "StudentResult") -> str:
         lines.append("提出形式を確認して、再提出してください。")
         return "\n".join(lines) + "\n"
 
-    if res.outcome is not None and res.outcome.results:
-        lines.append("## 自動テストの結果")
+    if res.special == "not_runnable":
+        lines.append("提出されたプログラムはエラーで実行できませんでした。")
+        if res.special_note:
+            lines.append("")
+            lines.append(f"> {res.special_note}")
         lines.append("")
-        lines.append("| テスト | 結果 | 備考 |")
-        lines.append("|---|---|---|")
-        for r in res.outcome.results:
-            mark = "✅ 合格" if r.passed else {"wrong_output": "❌ 出力不一致",
-                                               "error": "⚠️ 実行エラー",
-                                               "timeout": "⏱️ 時間切れ"}.get(r.status, "❌ 不合格")
-            note = (r.detail or "").replace("|", "\\|").replace("\n", " ")
-            lines.append(f"| {r.case.name} | {mark} | {note[:120]} |")
+        lines.append("まず手元の環境でプログラムを実行し、エラーなく動作することを確認してから")
+        lines.append("提出してください。エラーメッセージをよく読むと、原因の行番号や種類が分かります。")
+        lines.extend(_test_table(res))
+        return "\n".join(lines) + "\n"
+
+    if res.special == "io_mismatch":
+        lines.append("プログラムは実行できましたが、入力の受け取り方または出力の形式が")
+        lines.append("問題文の指定と一致していないため、すべてのテストが不合格になりました。")
         lines.append("")
+        lines.append("**問題文をもう一度よく読み**、入力の形式（行数・区切り）と出力の形式")
+        lines.append("（文言・空白・改行・小数の表記など）を正確に合わせてから再提出してください。")
+        lines.extend(_test_table(res))
+        return "\n".join(lines) + "\n"
+
+    lines.extend(_test_table(res))
 
     if res.score.criteria:
         lines.append("## 観点別評価")
@@ -76,11 +85,29 @@ def _fmt(value: float) -> str:
     return f"{round_half_up(value):g}"
 
 
+def _test_table(res: "StudentResult") -> list[str]:
+    if res.outcome is None or not res.outcome.results:
+        return []
+    lines = ["", "## 自動テストの結果", "", "| テスト | 結果 | 備考 |", "|---|---|---|"]
+    for r in res.outcome.results:
+        mark = "✅ 合格" if r.passed else {"wrong_output": "❌ 出力不一致",
+                                           "error": "⚠️ 実行エラー",
+                                           "timeout": "⏱️ 時間切れ"}.get(r.status, "❌ 不合格")
+        note = (r.detail or "").replace("|", "\\|").replace("\n", " ")
+        lines.append(f"| {r.case.name} | {mark} | {note[:120]} |")
+    lines.append("")
+    return lines
+
+
 def build_csv_comment(assignment: Assignment, res: "StudentResult") -> str:
     """ワークシートCSVの「フィードバックコメント」用の短縮版（MoodleはHTML表示）。"""
     parts: list[str] = []
     if not res.submission.has_code:
         parts.append("採点可能なPythonファイルが見つかりませんでした。提出形式を確認してください。")
+    elif res.special == "not_runnable":
+        parts.append("プログラムがエラーで実行できませんでした。手元で実行確認のうえ再提出してください。")
+    elif res.special == "io_mismatch":
+        parts.append("入力・出力の形式が問題文の指定と一致していません。問題文を再確認してください。")
     else:
         breakdown = res.score.breakdown_text()
         if breakdown:
