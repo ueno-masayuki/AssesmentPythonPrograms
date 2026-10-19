@@ -68,7 +68,15 @@ def grade(
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     warnings: list[str] = []
 
-    llm_usable = (use_llm and assignment.llm_enabled and bool(assignment.rubric)
+    # --- 採点可能かの検査 -------------------------------------------------
+    if assignment.rubric:
+        unassigned = [t.name for t in assignment.tests if not t.criterion]
+        if unassigned:
+            raise ValueError(
+                "次のテストケースに評価基準（ルーブリック）が割り当てられていません: "
+                + ", ".join(unassigned)
+            )
+    llm_usable = (use_llm and assignment.llm_enabled and bool(assignment.llm_criteria)
                   and llm_mod.llm_available())
     if not assignment.tests and not llm_usable:
         raise ValueError(
@@ -89,9 +97,12 @@ def grade(
     subs = discover_submissions(submissions_path, out_dir, assignment.expected_filename)
 
     # --- LLMの利用可否 ---------------------------------------------------
-    llm_enabled = use_llm and assignment.llm_enabled and bool(assignment.rubric)
+    llm_enabled = use_llm and assignment.llm_enabled and bool(assignment.llm_criteria)
     if llm_enabled and not llm_mod.llm_available():
-        warnings.append("ANTHROPIC_API_KEY が未設定のため、LLM評価なし（テストのみ）で採点しました。")
+        warnings.append(
+            "ANTHROPIC_API_KEY が未設定のため、AI評価対象の基準を除外し、"
+            "テスト基準の得点率から評点を換算しました。"
+        )
         llm_enabled = False
     cache_dir = out_dir / ".cache"
 
@@ -118,12 +129,9 @@ def grade(
                 except llm_mod.LLMUnavailable as e:
                     llm_error = str(e)
 
-        test_ratio = outcome.score_ratio if outcome else 0.0
-        rubric_ratio = evaluation.rubric_ratio if evaluation else None
+        score = compute_score(assignment, outcome, evaluation, max_grade)
         if not sub.has_code:
-            score = compute_score(assignment, 0.0, 0.0 if llm_enabled else None, max_grade)
-        else:
-            score = compute_score(assignment, test_ratio, rubric_ratio, max_grade)
+            score.final_grade = 0.0
 
         results.append(StudentResult(
             submission=sub, outcome=outcome, evaluation=evaluation,

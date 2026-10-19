@@ -16,38 +16,44 @@ description: |
 # 提出ファイル名（任意）。指定すると同名ファイルを優先して採点対象にします。
 expected_filename: kadai3.py
 
-# 最大評点。Moodleワークシートに「最大評点」列があればそちらが優先されます。
+# 最大評点。ルーブリックの配点合計はこの値と一致させます。
+# （Moodleワークシートに「最大評点」列があり値が異なる場合は比例換算されます）
 max_grade: 100
-
-# テスト点とルーブリック点（LLM評価）の重み
-weights:
-  tests: 0.7
-  rubric: 0.3
 
 tests:
   timeout: 5          # 1テストあたりの制限秒数（テスト側で上書き可）
   cases:
-    # 標準入出力テスト。match: exact（完全一致）/ trim（行末空白と末尾改行を無視, 既定）
-    #                   / whitespace（空白をすべて同一視）/ regex（正規表現検索）
+    # 各テストは criterion でルーブリック基準に紐づき、
+    # その基準の得点はテストの合否（重み付き）から計算されます。
+    # match: exact（完全一致）/ trim（行末空白と末尾改行を無視, 既定）
+    #        / whitespace（空白をすべて同一視）/ regex（正規表現検索）
     - name: "基本ケース"
+      criterion: correctness
       stdin: "3\n10 20 30\n"
       expected_stdout: "合計: 60\n平均: 20.0\n"
       match: trim
       weight: 2
     - name: "1個のみ"
+      criterion: correctness
       stdin: "1\n5\n"
       expected_stdout: "合計: 5\n平均: 5.0\n"
       match: trim
       weight: 1
     # 関数テスト。提出コード内の関数を呼び出して返り値を比較します。
     - name: "関数 average の動作"
+      criterion: correctness
       function: average
       args: [[10, 20, 30]]
       expected: 20.0
       weight: 1
 
-# ルーブリック（LLM評価の採点基準）。提案機能で自動生成することもできます。
+# ルーブリック（採点基準）。配点合計 = max_grade にすること。
+# テストが紐づく基準（correctness）は自動採点、紐づかない基準はLLMが評価します。
 rubric:
+  - id: correctness
+    name: "動作の正しさ"
+    points: 70
+    description: "プログラムが課題の仕様どおりに動作するか（自動テストで採点）"
   - id: readability
     name: "可読性（変数名・コメント）"
     points: 10

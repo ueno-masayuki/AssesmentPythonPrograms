@@ -22,12 +22,14 @@ SAVE_PAYLOAD = {
     "title": "テスト課題",
     "description": "合計を出力する",
     "max_grade": 100,
-    "weights": {"tests": 0.7, "rubric": 0.3},
     "tests": {"timeout": 3, "cases": [
-        {"name": "基本", "stdin": "3\n10 20 30\n", "expected_stdout": "合計: 60\n平均: 20.0\n",
-         "match": "trim", "weight": 2},
+        {"name": "基本", "criterion": "correctness", "stdin": "3\n10 20 30\n",
+         "expected_stdout": "合計: 60\n平均: 20.0\n", "match": "trim", "weight": 2},
     ]},
-    "rubric": [{"id": "readability", "name": "可読性", "points": 10}],
+    "rubric": [
+        {"id": "correctness", "name": "動作の正しさ", "points": 90},
+        {"id": "readability", "name": "可読性", "points": 10},
+    ],
     "model_answer": (
         "def average(xs):\n    return sum(xs) / len(xs)\n\n"
         "n = int(input())\nnums = list(map(int, input().split()))\n"
@@ -104,6 +106,15 @@ def test_assignment_crud(client):
     res = client.post(f"/api/assignments/{slug}/save", json=bad)
     assert res.status_code == 400
     assert "match" in res.json()["detail"]
+
+    # 配点合計 ≠ 最大評点 は保存できない
+    bad2 = dict(SAVE_PAYLOAD, rubric=[
+        {"id": "correctness", "name": "動作", "points": 50},
+        {"id": "readability", "name": "可読性", "points": 10},
+    ])
+    res = client.post(f"/api/assignments/{slug}/save", json=bad2)
+    assert res.status_code == 400
+    assert "配点合計" in res.json()["detail"]
 
     res = client.post(f"/assignments/{slug}/delete", follow_redirects=False)
     assert res.status_code == 303

@@ -106,14 +106,14 @@ def build_report(run: "GradeRun") -> str:
 
     lines.append("## 学生別結果")
     lines.append("")
-    lines.append("| 氏名 | 参加者ID | 評点 | テスト | ルーブリック | 備考 |")
+    lines.append("| 氏名 | 参加者ID | 評点 | テスト | 基準別内訳 | 備考 |")
     lines.append("|---|---|---|---|---|---|")
     for r in sorted(results, key=lambda x: x.submission.participant_id):
         tests = f"{r.outcome.passed_count}/{len(r.outcome.results)}" if r.outcome and r.outcome.results else "-"
-        rubric = f"{r.evaluation.rubric_ratio * 100:.0f}%" if r.evaluation else "-"
+        breakdown = r.score.breakdown_text() or "-"
         note = "; ".join(r.flags())[:80]
         lines.append(f"| {r.submission.student_name} | {r.submission.participant_id} "
-                     f"| {r.score.final_grade:g} | {tests} | {rubric} | {note} |")
+                     f"| {r.score.final_grade:g} | {tests} | {breakdown} | {note} |")
     lines.append("")
 
     unmatched = run.unmatched_worksheet_rows

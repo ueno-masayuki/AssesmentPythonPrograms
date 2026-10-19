@@ -38,11 +38,13 @@ def sample_assignment():
         expected_filename="kadai3.py",
         max_grade=100.0,
         tests=[
-            TestCase(name="基本ケース", stdin="3\n10 20 30\n",
+            TestCase(name="基本ケース", criterion="correctness", stdin="3\n10 20 30\n",
                      expected_stdout="合計: 60\n平均: 20.0\n", match="trim", weight=2),
-            TestCase(name="関数テスト", function="average", args=[[10, 20, 30]], expected=20.0),
+            TestCase(name="関数テスト", criterion="correctness",
+                     function="average", args=[[10, 20, 30]], expected=20.0),
         ],
         rubric=[
+            RubricCriterion(id="correctness", name="動作の正しさ", points=80),
             RubricCriterion(id="readability", name="可読性", points=10),
             RubricCriterion(id="structure", name="構造", points=10),
         ],

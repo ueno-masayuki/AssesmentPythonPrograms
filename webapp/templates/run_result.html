@@ -21,7 +21,7 @@
   <div class="card">
     <h2>学生別結果</h2>
     <table class="list">
-      <thead><tr><th>氏名</th><th>参加者ID</th><th>評点</th><th>テスト</th><th>ルーブリック</th><th>備考</th></tr></thead>
+      <thead><tr><th>氏名</th><th>参加者ID</th><th>評点</th><th>テスト</th><th>基準別内訳</th><th>備考</th></tr></thead>
       <tbody>
       {% for s in summary.students %}
         <tr class="{{ 'flagged' if s.flags else '' }}">

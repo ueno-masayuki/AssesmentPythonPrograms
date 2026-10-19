@@ -68,8 +68,7 @@ async def index(request: Request):
 async def create_assignment(title: str = Form(...)):
     title = title.strip() or "新しい課題"
     slug = storage.slugify(title)
-    a = Assignment(title=title, description="", tests=[], rubric=[],
-                   weight_tests=0.7, weight_rubric=0.3)
+    a = Assignment(title=title, description="", tests=[], rubric=[])
     storage.save(slug, a)
     return RedirectResponse(f"/assignments/{slug}", status_code=303)
 
@@ -132,7 +131,7 @@ async def propose(slug: str, request: Request):
             p = proposals.propose_tests(a)
             return {"cases": [
                 {"name": c.name_ja, "stdin": c.stdin, "expected_stdout": c.expected_stdout,
-                 "match": c.match, "weight": c.weight}
+                 "match": c.match, "weight": c.weight, "criterion": c.criterion}
                 for c in p.cases
             ]}
     except llm_mod.LLMUnavailable as e:

@@ -99,7 +99,7 @@ def _persist_summary(run: GradeRun, out_dir: Path, run_id: str) -> None:
                 "grade": r.score.final_grade,
                 "tests": (f"{r.outcome.passed_count}/{len(r.outcome.results)}"
                           if r.outcome and r.outcome.results else "-"),
-                "rubric": (f"{r.evaluation.rubric_ratio * 100:.0f}%" if r.evaluation else "-"),
+                "rubric": r.score.breakdown_text() or "-",
                 "flags": r.flags(),
             }
             for r in run.results

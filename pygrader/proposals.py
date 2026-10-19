@@ -33,12 +33,46 @@ class RubricProposal(BaseModel):
     criteria: list[RubricCriterionProposal] = Field(description="3〜5個程度の採点基準")
 
 
+def normalize_points(points: list[float], total: float) -> list[float]:
+    """配点リストを比例スケールして、合計がちょうど total になる整数配点にする。
+
+    丸めで生じた端数は配点が最大の基準で調整する。どうしても整数で合わせられない
+    端数（totalが非整数等）は最後の要素に寄せる。
+    """
+    if not points or total <= 0:
+        return list(points)
+    cur = sum(points)
+    if cur <= 0:
+        base = total / len(points)
+        scaled = [base] * len(points)
+    else:
+        scaled = [p * total / cur for p in points]
+    rounded = [max(1.0, float(round(p))) for p in scaled]
+    diff = total - sum(rounded)
+    if abs(diff) >= 0.5:
+        # 整数単位のずれは最大配点の基準に足し引きする（1点未満にはしない）
+        order = sorted(range(len(rounded)), key=lambda i: -rounded[i])
+        step = 1.0 if diff > 0 else -1.0
+        remaining = round(abs(diff))
+        for _ in range(int(remaining)):
+            for i in order:
+                if step > 0 or rounded[i] > 1.0:
+                    rounded[i] += step
+                    break
+    # 小数の端数（totalが非整数の場合）は先頭に寄せる
+    frac = total - sum(rounded)
+    if abs(frac) >= 0.01:
+        rounded[0] = max(0.5, rounded[0] + frac)
+    return rounded
+
+
 class TestCaseProposal(BaseModel):
     name_ja: str = Field(description="テストケース名（日本語）")
     stdin: str = Field(description="標準入力に与える文字列（改行含む）")
     expected_stdout: str = Field(description="期待される標準出力")
     match: str = Field(description=f"照合モード: {', '.join(MATCH_MODES)} のいずれか（通常は trim）")
     weight: float = Field(description="重み（通常は1）")
+    criterion: str = Field(description="紐づけるルーブリック基準のid（指定された一覧から選ぶ）")
 
 
 class TestsProposal(BaseModel):
@@ -103,29 +137,49 @@ def propose_model_answer(assignment: Assignment) -> ModelAnswerProposal:
 def propose_rubric(assignment: Assignment) -> RubricProposal:
     if not assignment.description.strip():
         raise LLMUnavailable("課題説明を先に記入してください")
-    total = assignment.rubric_total_points or 30
-    return _ask(
+    total = assignment.max_grade or 100
+    proposal = _ask(
         assignment,
         f"この課題の採点に使うルーブリック（採点基準）を提案してください。"
-        f"基準は3〜5個、配点の合計は {total:g} 点にしてください。"
-        "初学者の提出物で差がつきやすい観点（正しさ以外に可読性・構造など）を含めてください。",
+        f"基準は3〜5個、配点の合計はちょうど {total:g} 点にしてください。"
+        "必ず、自動テストで採点する「動作の正しさ」に相当する基準（id: correctness）を"
+        "1つ含め、そこに配点の過半を割り当ててください。"
+        "残りは初学者の提出物で差がつきやすい観点（可読性・構造・入出力の扱いなど）に"
+        "配分してください。",
         RubricProposal,
     )
+    # LLMの出力に依存せず、合計がちょうど最大評点になるよう正規化する
+    normalized = normalize_points([c.points for c in proposal.criteria], float(total))
+    for c, p in zip(proposal.criteria, normalized):
+        c.points = p
+    return proposal
 
 
 def propose_tests(assignment: Assignment) -> TestsProposal:
     if not assignment.description.strip():
         raise LLMUnavailable("課題説明を先に記入してください")
+    rubric_ids = [r.id for r in assignment.rubric]
+    criterion_note = (
+        f"各テストの criterion は {rubric_ids} から選んでください"
+        "（通常は『動作の正しさ』に相当する基準）。"
+        if rubric_ids else "criterion は 'correctness' としてください。"
+    )
     proposal = _ask(
         assignment,
         "この課題の自動採点に使う標準入出力テストケースを3〜6個提案してください。"
         "基本ケースに加えて、境界値や少し意地悪なケースも含めてください。"
-        "expected_stdout は課題説明の出力形式に正確に従ってください。",
+        "expected_stdout は課題説明の出力形式に正確に従ってください。" + criterion_note,
         TestsProposal,
     )
+    # 既定の紐づけ先: テストが既に紐づいている基準 → 先頭の基準
+    linked = {t.criterion for t in assignment.tests if t.criterion}
+    default_id = next((r.id for r in assignment.rubric if r.id in linked),
+                      rubric_ids[0] if rubric_ids else "")
     for c in proposal.cases:
         if c.match not in MATCH_MODES:
             c.match = "trim"
         if c.weight <= 0:
             c.weight = 1.0
+        if rubric_ids and c.criterion not in rubric_ids:
+            c.criterion = default_id
     return proposal

@@ -38,20 +38,25 @@ def build_feedback_text(assignment: Assignment, res: "StudentResult") -> str:
             lines.append(f"| {r.case.name} | {mark} | {note[:120]} |")
         lines.append("")
 
+    if res.score.criteria:
+        lines.append("## 観点別評価")
+        lines.append("")
+        lines.append("| 観点 | 得点 | 評価方法 | コメント |")
+        lines.append("|---|---|---|---|")
+        for c in res.score.criteria:
+            if c.source == "none":
+                continue
+            method = "自動テスト" if c.source == "tests" else "AI評価"
+            note = c.note.replace("|", "\\|").replace("\n", " ")
+            lines.append(f"| {c.criterion.name} | {_fmt(c.earned)} / {c.criterion.points:g} "
+                         f"| {method} | {note} |")
+        lines.append("")
+        if res.score.renormalized:
+            lines.append("※ AI評価を行わなかったため、自動テストで評価できる観点の得点率から"
+                         "評点を換算しています。")
+            lines.append("")
+
     if res.evaluation is not None:
-        if res.evaluation.criteria:
-            points = {r.id: r for r in assignment.rubric}
-            lines.append("## 観点別評価")
-            lines.append("")
-            lines.append("| 観点 | 得点 | コメント |")
-            lines.append("|---|---|---|")
-            for c in res.evaluation.criteria:
-                crit = points.get(c.criterion_id)
-                name = crit.name if crit else c.criterion_id
-                maxp = f"{crit.points:g}" if crit else "?"
-                reason = c.reason_ja.replace("|", "\\|").replace("\n", " ")
-                lines.append(f"| {name} | {c.score:g} / {maxp} | {reason} |")
-            lines.append("")
         lines.append("## 講評")
         lines.append("")
         lines.append(res.evaluation.feedback_ja.strip())
@@ -65,15 +70,25 @@ def build_feedback_text(assignment: Assignment, res: "StudentResult") -> str:
     return "\n".join(lines) + "\n"
 
 
+def _fmt(value: float) -> str:
+    from .scoring import round_half_up
+
+    return f"{round_half_up(value):g}"
+
+
 def build_csv_comment(assignment: Assignment, res: "StudentResult") -> str:
     """ワークシートCSVの「フィードバックコメント」用の短縮版（MoodleはHTML表示）。"""
     parts: list[str] = []
-    if res.outcome is not None and res.outcome.results:
-        parts.append(f"自動テスト: {res.outcome.passed_count}/{len(res.outcome.results)} 件合格")
-    if res.evaluation is not None:
-        parts.append(res.evaluation.overall_comment_ja.strip())
-    elif not res.submission.has_code:
+    if not res.submission.has_code:
         parts.append("採点可能なPythonファイルが見つかりませんでした。提出形式を確認してください。")
+    else:
+        breakdown = res.score.breakdown_text()
+        if breakdown:
+            parts.append(f"内訳: {breakdown}")
+        elif res.outcome is not None and res.outcome.results:
+            parts.append(f"自動テスト: {res.outcome.passed_count}/{len(res.outcome.results)} 件合格")
+        if res.evaluation is not None:
+            parts.append(res.evaluation.overall_comment_ja.strip())
     parts.append("詳細はフィードバックファイルを確認してください。")
     return "<br>".join(p for p in parts if p)
 

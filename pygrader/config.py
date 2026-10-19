@@ -27,6 +27,7 @@ class TestCase:
     __test__ = False  # pytestの収集対象ではない
 
     name: str
+    criterion: str | None = None  # 紐づけるルーブリック基準のid
     weight: float = 1.0
     timeout: float | None = None  # Noneなら tests.timeout を使う
     # stdin/stdout テスト
@@ -81,8 +82,6 @@ class Assignment:
     description: str = ""
     expected_filename: str | None = None
     max_grade: float | None = 100.0
-    weight_tests: float = 0.7
-    weight_rubric: float = 0.3
     test_timeout: float = DEFAULT_TIMEOUT
     tests: list[TestCase] = field(default_factory=list)
     rubric: list[RubricCriterion] = field(default_factory=list)
@@ -96,8 +95,6 @@ class Assignment:
         if not self.title.strip():
             raise ConfigError("title は必須です")
         # tests/rubric が両方空でも下書きとして有効。採点開始時に pipeline.grade() が検査する。
-        if self.weight_tests < 0 or self.weight_rubric < 0 or (self.weight_tests + self.weight_rubric) <= 0:
-            raise ConfigError("weights.tests / weights.rubric は非負で、合計が正になるようにしてください")
         if self.max_grade is not None and self.max_grade <= 0:
             raise ConfigError("max_grade は正の数にしてください")
         if self.test_timeout <= 0:
@@ -109,10 +106,38 @@ class Assignment:
         ids = [r.id for r in self.rubric]
         if len(ids) != len(set(ids)):
             raise ConfigError("rubric の id が重複しています")
+        if self.rubric:
+            # テストの紐づけ先が存在すること
+            for t in self.tests:
+                if t.criterion and t.criterion not in ids:
+                    raise ConfigError(
+                        f"テスト「{t.name}」の評価基準 {t.criterion!r} がルーブリックにありません")
+            # 配点合計 = 最大評点 を強制
+            if self.max_grade is not None and abs(self.rubric_total_points - self.max_grade) >= 0.01:
+                raise ConfigError(
+                    f"ルーブリックの配点合計（{self.rubric_total_points:g}点）が"
+                    f"最大評点（{self.max_grade:g}点）と一致していません。"
+                    "配点を調整してください（WebUIの「配点を最大評点に合わせる」ボタンが使えます）。"
+                )
 
     @property
     def rubric_total_points(self) -> float:
         return sum(r.points for r in self.rubric)
+
+    def tests_for(self, criterion_id: str) -> list[TestCase]:
+        return [t for t in self.tests if t.criterion == criterion_id]
+
+    @property
+    def test_criteria(self) -> list[RubricCriterion]:
+        """テストが1件以上紐づく基準（テスト結果から得点を計算する）。"""
+        linked = {t.criterion for t in self.tests if t.criterion}
+        return [r for r in self.rubric if r.id in linked]
+
+    @property
+    def llm_criteria(self) -> list[RubricCriterion]:
+        """テストが紐づかない基準（LLMが評価する）。"""
+        linked = {t.criterion for t in self.tests if t.criterion}
+        return [r for r in self.rubric if r.id not in linked]
 
     # ---- YAML入出力 ----------------------------------------------------
 
@@ -121,7 +146,6 @@ class Assignment:
             "title": self.title,
             "description": self.description,
             "max_grade": self.max_grade,
-            "weights": {"tests": self.weight_tests, "rubric": self.weight_rubric},
             "tests": {
                 "timeout": self.test_timeout,
                 "cases": [_testcase_to_dict(t) for t in self.tests],
@@ -147,6 +171,8 @@ class Assignment:
 
 def _testcase_to_dict(t: TestCase) -> dict[str, Any]:
     d: dict[str, Any] = {"name": t.name, "weight": t.weight}
+    if t.criterion:
+        d["criterion"] = t.criterion
     if t.timeout is not None:
         d["timeout"] = t.timeout
     if t.is_function_test:
@@ -159,12 +185,14 @@ def _testcase_to_dict(t: TestCase) -> dict[str, Any]:
 def _parse_testcase(raw: dict[str, Any], index: int) -> TestCase:
     if not isinstance(raw, dict):
         raise ConfigError(f"tests.cases[{index}] はマッピングで指定してください")
-    known = {"name", "weight", "timeout", "stdin", "expected_stdout", "match", "function", "args", "expected"}
+    known = {"name", "criterion", "weight", "timeout", "stdin", "expected_stdout", "match",
+             "function", "args", "expected"}
     unknown = set(raw) - known
     if unknown:
         raise ConfigError(f"tests.cases[{index}]: 不明なキーがあります: {sorted(unknown)}")
     return TestCase(
         name=str(raw.get("name") or f"テスト{index + 1}"),
+        criterion=str(raw["criterion"]) if raw.get("criterion") else None,
         weight=float(raw.get("weight", 1.0)),
         timeout=float(raw["timeout"]) if raw.get("timeout") is not None else None,
         stdin=str(raw["stdin"]) if raw.get("stdin") is not None else None,
@@ -179,7 +207,7 @@ def _parse_testcase(raw: dict[str, Any], index: int) -> TestCase:
 def assignment_from_dict(data: dict[str, Any]) -> Assignment:
     if not isinstance(data, dict):
         raise ConfigError("課題定義のルートはマッピングにしてください")
-    weights = data.get("weights") or {}
+    # 旧形式の weights キーは無視する（後方互換）
     tests_block = data.get("tests") or {}
     if isinstance(tests_block, list):  # cases直書きも許容
         tests_block = {"cases": tests_block}
@@ -203,8 +231,6 @@ def assignment_from_dict(data: dict[str, Any]) -> Assignment:
         description=str(data.get("description", "")),
         expected_filename=(str(data["expected_filename"]) if data.get("expected_filename") else None),
         max_grade=(float(data["max_grade"]) if data.get("max_grade") is not None else None),
-        weight_tests=float(weights.get("tests", 0.7)),
-        weight_rubric=float(weights.get("rubric", 0.3)),
         test_timeout=float(tests_block.get("timeout", DEFAULT_TIMEOUT)),
         tests=[_parse_testcase(raw, i) for i, raw in enumerate(tests_block.get("cases") or [])],
         rubric=rubric,

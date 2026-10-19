@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from .config import Assignment
 from .runner import RunOutcome
 
-PROMPT_VERSION = "1"  # プロンプトを変えたらインクリメント（キャッシュ無効化）
+PROMPT_VERSION = "2"  # プロンプトを変えたらインクリメント（キャッシュ無効化）
 
 _MAX_CODE_CHARS = 30_000
 _MAX_DETAIL_CHARS = 500
@@ -77,14 +77,18 @@ def _client():
 
 
 def build_eval_prompt(assignment: Assignment, code_text: str, outcome: RunOutcome | None) -> str:
+    """LLM評価対象（テストが紐づかない）基準だけを採点させるプロンプト。"""
     parts: list[str] = []
     parts.append(f"# 課題\n## {assignment.title}\n{assignment.description.strip()}")
 
     rubric_lines = [
         f"- id: {r.id} / {r.name}（満点 {r.points:g}点）" + (f" — {r.description}" if r.description else "")
-        for r in assignment.rubric
+        for r in assignment.llm_criteria
     ]
-    parts.append("# ルーブリック（採点基準）\n" + "\n".join(rubric_lines))
+    parts.append("# あなたが採点する基準（この基準のみ採点すること）\n" + "\n".join(rubric_lines))
+    if assignment.test_criteria:
+        auto_lines = [f"- {r.name}（{r.points:g}点）" for r in assignment.test_criteria]
+        parts.append("# 参考: 自動テストで採点される基準（あなたは採点しない）\n" + "\n".join(auto_lines))
 
     if assignment.model_answer.strip():
         parts.append(f"# 参考: 回答例（模範解答）\n```python\n{assignment.model_answer.strip()}\n```")
@@ -118,7 +122,7 @@ def _cache_key(model: str, assignment: Assignment, code_text: str, outcome: RunO
     h.update(PROMPT_VERSION.encode())
     h.update(model.encode())
     rubric_repr = json.dumps(
-        [[r.id, r.name, r.points, r.description] for r in assignment.rubric],
+        [[r.id, r.name, r.points, r.description] for r in assignment.llm_criteria],
         ensure_ascii=False, sort_keys=True,
     )
     h.update(rubric_repr.encode())
@@ -133,9 +137,9 @@ def _cache_key(model: str, assignment: Assignment, code_text: str, outcome: RunO
 
 def evaluate(assignment: Assignment, code_text: str, outcome: RunOutcome | None,
              cache_dir: Path | None = None, use_cache: bool = True) -> LLMEvaluation:
-    """1人分のコードをLLMで評価する。失敗時は LLMUnavailable を送出。"""
-    if not assignment.rubric:
-        raise LLMUnavailable("ルーブリックが定義されていません")
+    """1人分のコードをLLMで評価する（テストが紐づかない基準のみ）。失敗時は LLMUnavailable。"""
+    if not assignment.llm_criteria:
+        raise LLMUnavailable("LLM評価の対象となる基準（テスト未紐づけ）がありません")
 
     model = assignment.llm_model
     key = _cache_key(model, assignment, code_text, outcome)
@@ -180,7 +184,7 @@ def evaluate(assignment: Assignment, code_text: str, outcome: RunOutcome | None,
 
 
 def _to_evaluation(assignment: Assignment, result: RubricResult) -> LLMEvaluation:
-    points_by_id = {r.id: r.points for r in assignment.rubric}
+    points_by_id = {r.id: r.points for r in assignment.llm_criteria}
     total = sum(points_by_id.values())
     earned = 0.0
     clamped: list[CriterionScore] = []

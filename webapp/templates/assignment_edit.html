@@ -19,8 +19,6 @@
   <div class="row">
     <label>提出ファイル名（任意）<input type="text" id="f-expected" placeholder="例: kadai3.py"></label>
     <label>最大評点<input type="number" id="f-maxgrade" min="1" step="1"></label>
-    <label>重み: テスト<input type="number" id="f-wtests" min="0" max="1" step="0.05"></label>
-    <label>重み: ルーブリック<input type="number" id="f-wrubric" min="0" max="1" step="0.05"></label>
     <label>タイムアウト(秒)<input type="number" id="f-timeout" min="1" step="1"></label>
   </div>
   <label class="check"><input type="checkbox" id="f-llm-enabled"> LLM評価を使う</label>
@@ -32,10 +30,11 @@
     <button class="small" onclick="addTestRow()">+ 行を追加</button>
     <button class="small propose" data-target="tests" {% if not llm_available %}disabled title="APIキーが未設定です"{% endif %}>✨ テストケースを提案</button>
   </h2>
-  <p class="muted">標準入出力テスト、または関数テスト（関数名を入れると args/expected を使用）。</p>
+  <p class="muted">標準入出力テスト、または関数テスト（関数名を入れると args/expected を使用）。
+    各テストは「評価基準」に紐づき、その基準の得点はテストの合否から計算されます。</p>
   <table class="edit-table" id="tests-table">
     <thead><tr>
-      <th>名前</th><th>標準入力</th><th>期待出力</th><th>照合</th>
+      <th>名前</th><th>評価基準</th><th>標準入力</th><th>期待出力</th><th>照合</th>
       <th>関数名</th><th>args(JSON)</th><th>期待値(JSON)</th><th>重み</th><th></th>
     </tr></thead>
     <tbody></tbody>
@@ -47,10 +46,14 @@
     <button class="small" onclick="addRubricRow()">+ 行を追加</button>
     <button class="small propose" data-target="rubric" {% if not llm_available %}disabled title="APIキーが未設定です"{% endif %}>✨ ルーブリックを提案</button>
   </h2>
+  <p class="muted">テストが紐づく基準は自動採点、紐づかない基準はAI（LLM）が評価します。
+    配点の合計は最大評点と一致させてください。</p>
   <table class="edit-table" id="rubric-table">
-    <thead><tr><th>id（英数字）</th><th>基準名</th><th>配点</th><th>説明</th><th></th></tr></thead>
+    <thead><tr><th>id（英数字）</th><th>基準名</th><th>配点</th><th>評価方法</th><th>説明</th><th></th></tr></thead>
     <tbody></tbody>
   </table>
+  <p id="points-total" class="points-total"></p>
+  <button class="small" id="btn-normalize">⚖ 配点を最大評点に合わせる</button>
 </section>
 
 <section class="card">
