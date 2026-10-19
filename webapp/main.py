@@ -70,8 +70,7 @@ async def create_assignment(title: str = Form(...)):
     slug = storage.slugify(title)
     a = Assignment(title=title, description="", tests=[], rubric=[],
                    weight_tests=0.7, weight_rubric=0.3)
-    # validate()は tests/rubric 空を許さないため、保存だけ直接行う
-    a.save(storage.assignment_path(slug))
+    storage.save(slug, a)
     return RedirectResponse(f"/assignments/{slug}", status_code=303)
 
 
@@ -157,19 +156,10 @@ async def check(slug: str, request: Request):
 
 
 def _parse_for_tools(data: dict) -> Assignment:
-    """提案・動作確認用: tests/rubricが空でも許容する緩い解析。"""
+    """提案・動作確認用: 編集中（未保存）のフォーム内容を解析する。"""
     data = dict(data)
     data.setdefault("title", "untitled")
-    try:
-        return assignment_from_dict(data)
-    except ConfigError as e:
-        # tests/rubric両方空のときのvalidateエラーだけ救済する
-        if "少なくとも一方" in str(e):
-            data["rubric"] = [{"id": "placeholder", "name": "仮", "points": 1}]
-            a = assignment_from_dict(data)
-            a.rubric = []
-            return a
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    return _parse_assignment(data)
 
 
 # ---------------------------------------------------------------------------

@@ -53,6 +53,46 @@ def test_index(client):
     assert "課題一覧" in res.text
 
 
+def test_new_assignment_opens_empty(client):
+    """新規作成直後（tests/rubricとも空）に編集画面が開けること（回帰）。"""
+    res = client.post("/assignments/new", data={"title": "空の課題"}, follow_redirects=False)
+    assert res.status_code == 303
+    slug = res.headers["location"].rsplit("/", 1)[-1]
+
+    res = client.get(f"/assignments/{slug}")
+    assert res.status_code == 200
+    assert "空の課題" in res.text
+
+    # 空の下書きのまま保存できる
+    draft = {"title": "空の課題", "description": "まだ書きかけ",
+             "tests": {"cases": []}, "rubric": [], "model_answer": ""}
+    res = client.post(f"/api/assignments/{slug}/save", json=draft)
+    assert res.status_code == 200, res.text
+    assert client.get(f"/assignments/{slug}").status_code == 200
+
+
+def test_grade_empty_assignment_errors(client, fixtures: Path):
+    """テストもルーブリックもない課題で採点を開始すると明確なエラーになる。"""
+    res = client.post("/assignments/new", data={"title": "未設定課題"}, follow_redirects=False)
+    slug = res.headers["location"].rsplit("/", 1)[-1]
+
+    with (fixtures / "submissions.zip").open("rb") as sub:
+        res = client.post(
+            f"/assignments/{slug}/grade",
+            files={"submissions": ("submissions.zip", sub, "application/zip")},
+            follow_redirects=False,
+        )
+    assert res.status_code == 303
+    run_url = res.headers["location"]
+    for _ in range(50):
+        s = client.get(f"/api{run_url}/status").json()
+        if s["status"] in ("done", "error"):
+            break
+        time.sleep(0.2)
+    assert s["status"] == "error"
+    assert "登録" in s["error"]
+
+
 def test_assignment_crud(client):
     slug = _create_assignment(client)
     res = client.get(f"/assignments/{slug}")

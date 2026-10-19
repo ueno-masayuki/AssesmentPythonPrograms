@@ -67,15 +67,19 @@ def cmd_grade(args: argparse.Namespace) -> int:
     def progress(done: int, total: int, name: str) -> None:
         print(f"  [{done}/{total}] {name}")
 
-    run = grade(
-        assignment,
-        submissions_path=Path(args.submissions),
-        worksheet_path=Path(args.worksheet) if args.worksheet else None,
-        out_dir=Path(args.out),
-        use_llm=not args.no_llm,
-        use_cache=not args.no_cache,
-        progress=progress,
-    )
+    try:
+        run = grade(
+            assignment,
+            submissions_path=Path(args.submissions),
+            worksheet_path=Path(args.worksheet) if args.worksheet else None,
+            out_dir=Path(args.out),
+            use_llm=not args.no_llm,
+            use_cache=not args.no_cache,
+            progress=progress,
+        )
+    except ValueError as e:
+        print(f"エラー: {e}", file=sys.stderr)
+        return 1
     for w in run.warnings:
         print(f"警告: {w}")
     print(f"\n採点完了: {len(run.results)} 名（最大評点 {run.max_grade:g}）")

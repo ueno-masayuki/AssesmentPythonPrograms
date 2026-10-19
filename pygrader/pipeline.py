@@ -68,6 +68,14 @@ def grade(
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     warnings: list[str] = []
 
+    llm_usable = (use_llm and assignment.llm_enabled and bool(assignment.rubric)
+                  and llm_mod.llm_available())
+    if not assignment.tests and not llm_usable:
+        raise ValueError(
+            "採点できません。課題にテストケースを登録するか、"
+            "ルーブリックを登録して LLM評価（ANTHROPIC_API_KEY）を有効にしてください。"
+        )
+
     # --- 入力の読み込み --------------------------------------------------
     worksheet: Worksheet | None = None
     if worksheet_path is not None:

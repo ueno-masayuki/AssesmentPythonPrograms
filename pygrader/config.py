@@ -95,8 +95,7 @@ class Assignment:
     def validate(self) -> None:
         if not self.title.strip():
             raise ConfigError("title は必須です")
-        if not self.tests and not (self.rubric and self.llm_enabled):
-            raise ConfigError("tests か rubric（llm有効時）の少なくとも一方を定義してください")
+        # tests/rubric が両方空でも下書きとして有効。採点開始時に pipeline.grade() が検査する。
         if self.weight_tests < 0 or self.weight_rubric < 0 or (self.weight_tests + self.weight_rubric) <= 0:
             raise ConfigError("weights.tests / weights.rubric は非負で、合計が正になるようにしてください")
         if self.max_grade is not None and self.max_grade <= 0:
