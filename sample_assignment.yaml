@@ -1,0 +1,81 @@
+# ============================================================
+# pygrader 課題設定ファイル（サンプル）
+# 1課題 = 1ファイル。WebUIで編集することも、直接編集することもできます。
+# ============================================================
+
+title: "課題3: 成績の集計"
+
+# 課題説明（学生に提示した問題文）。LLM評価・提案機能の入力になります。
+description: |
+  標準入力から1行目に整数 n、2行目に n 個の整数を空白区切りで読み込み、
+  次の形式で合計と平均を出力するプログラムを作成しなさい。
+    合計: 60
+    平均: 20.0
+  また、リストを受け取って平均を返す関数 average(xs) を定義すること。
+
+# 提出ファイル名（任意）。指定すると同名ファイルを優先して採点対象にします。
+expected_filename: kadai3.py
+
+# 最大評点。Moodleワークシートに「最大評点」列があればそちらが優先されます。
+max_grade: 100
+
+# テスト点とルーブリック点（LLM評価）の重み
+weights:
+  tests: 0.7
+  rubric: 0.3
+
+tests:
+  timeout: 5          # 1テストあたりの制限秒数（テスト側で上書き可）
+  cases:
+    # 標準入出力テスト。match: exact（完全一致）/ trim（行末空白と末尾改行を無視, 既定）
+    #                   / whitespace（空白をすべて同一視）/ regex（正規表現検索）
+    - name: "基本ケース"
+      stdin: "3\n10 20 30\n"
+      expected_stdout: "合計: 60\n平均: 20.0\n"
+      match: trim
+      weight: 2
+    - name: "1個のみ"
+      stdin: "1\n5\n"
+      expected_stdout: "合計: 5\n平均: 5.0\n"
+      match: trim
+      weight: 1
+    # 関数テスト。提出コード内の関数を呼び出して返り値を比較します。
+    - name: "関数 average の動作"
+      function: average
+      args: [[10, 20, 30]]
+      expected: 20.0
+      weight: 1
+
+# ルーブリック（LLM評価の採点基準）。提案機能で自動生成することもできます。
+rubric:
+  - id: readability
+    name: "可読性（変数名・コメント）"
+    points: 10
+    description: "意味のある変数名、適切なコメントが書けているか"
+  - id: structure
+    name: "適切な構造"
+    points: 10
+    description: "関数化・重複のなさなど、構造が適切か"
+  - id: io_handling
+    name: "入出力の扱い"
+    points: 10
+    description: "入力の読み取りと出力形式が課題の指示どおりか"
+
+# 回答例（模範解答）。LLM評価の参考・checkコマンドのテスト対象になります。
+# WebUIの提案機能で生成することもできます。
+model_answer: |
+  # 成績の集計
+  def average(xs):
+      return sum(xs) / len(xs)
+
+  n = int(input())
+  nums = list(map(int, input().split()))
+  print(f"合計: {sum(nums)}")
+  print(f"平均: {average(nums)}")
+
+llm:
+  model: claude-sonnet-5-5   # 採点・提案に使うClaudeモデル
+  enabled: true              # falseにするとテストのみで採点
+
+similarity_check: true       # 類似提出の検出をレポートに含める
+feedback_file: feedback.md   # フィードバックファイル名
