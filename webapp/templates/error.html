@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}エラー — pygrader{% endblock %}
+{% block content %}
+<h1>エラー ({{ status }})</h1>
+<div class="notice error">{{ detail }}</div>
+<p><a href="/">← 課題一覧へ戻る</a></p>
+{% endblock %}

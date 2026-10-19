@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}採点結果 — pygrader{% endblock %}
+{% block content %}
+<h1>採点結果 <span class="muted">{{ run_id }}</span></h1>
+
+{% if summary %}
+  <div class="card">
+    <h2>{{ summary.title }}</h2>
+    <p>実行日時: {{ summary.timestamp }} ／ 最大評点: {{ summary.max_grade }} ／
+       LLM評価: {{ "あり" if summary.llm_used else "なし（テストのみ）" }}</p>
+    {% for w in summary.warnings %}
+      <div class="notice warn">{{ w }}</div>
+    {% endfor %}
+    <p class="downloads">
+      <a class="button primary" href="/runs/{{ run_id }}/download/worksheet">⬇ 採点ワークシートCSV</a>
+      <a class="button primary" href="/runs/{{ run_id }}/download/feedback_zip">⬇ フィードバックzip</a>
+      <a class="button" href="/runs/{{ run_id }}/download/report">⬇ レポート(Markdown)</a>
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>学生別結果</h2>
+    <table class="list">
+      <thead><tr><th>氏名</th><th>参加者ID</th><th>評点</th><th>テスト</th><th>ルーブリック</th><th>備考</th></tr></thead>
+      <tbody>
+      {% for s in summary.students %}
+        <tr class="{{ 'flagged' if s.flags else '' }}">
+          <td>{{ s.name }}</td><td>{{ s.participant_id }}</td>
+          <td>{{ s.grade }}</td><td>{{ s.tests }}</td><td>{{ s.rubric }}</td>
+          <td class="small-text">{{ s.flags | join(" / ") }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if summary.unmatched_worksheet_rows %}
+      <h3>ワークシートにいるが提出がない学生</h3>
+      <ul>{% for n in summary.unmatched_worksheet_rows %}<li>{{ n }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+{% else %}
+  <div class="card" id="progress-card">
+    <h2>採点中…</h2>
+    <progress id="progress-bar" max="100" value="0"></progress>
+    <p id="progress-text">開始しています…</p>
+  </div>
+{% endif %}
+
+<p><a href="/">← 課題一覧へ戻る</a></p>
+{% endblock %}
+
+{% block scripts %}
+{% if not summary %}
+<script>pollRunStatus({{ run_id | tojson }});</script>
+{% endif %}
+{% endblock %}

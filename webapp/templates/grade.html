@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}採点実行 — pygrader{% endblock %}
+{% block content %}
+<h1>採点の実行: {{ assignment.title }}</h1>
+
+<div class="notice info">
+  Moodleの課題画面から
+  「<strong>すべての提出をダウンロード</strong>」のzipと、
+  「<strong>採点ワークシートをダウンロード</strong>」のCSVを取得してアップロードしてください。
+  ワークシートを省略すると、評点CSVは生成されません（フィードバックzipとレポートのみ）。
+</div>
+
+{% if not llm_available %}
+<div class="notice warn">
+  <code>ANTHROPIC_API_KEY</code> が未設定のため、LLM評価なし（テストのみ）で採点されます。
+</div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" class="card">
+  <label>提出zip（必須）
+    <input type="file" name="submissions" accept=".zip" required></label>
+  <label>採点ワークシートCSV（推奨）
+    <input type="file" name="worksheet" accept=".csv"></label>
+  <label class="check"><input type="checkbox" name="use_llm" value="true" checked
+    {% if not llm_available %}disabled{% endif %}> LLM評価を使う</label>
+  <label class="check"><input type="checkbox" name="use_cache" value="true" checked>
+    前回のLLM評価キャッシュを使う（再採点が高速・低コストになります）</label>
+  <button type="submit" class="primary big">採点を開始</button>
+</form>
+
+<p><a href="/assignments/{{ slug }}">← 課題の編集へ戻る</a></p>
+{% endblock %}

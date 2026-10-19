@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}課題編集 — pygrader{% endblock %}
+{% block content %}
+<h1>課題の編集 <a class="button" href="/assignments/{{ slug }}/grade">この課題で採点する →</a></h1>
+
+{% if not llm_available %}
+<div class="notice warn">
+  <code>ANTHROPIC_API_KEY</code> が未設定のため、提案機能は使えません。
+</div>
+{% endif %}
+
+<div id="status" class="notice" hidden></div>
+
+<section class="card">
+  <h2>基本情報</h2>
+  <label>タイトル<input type="text" id="f-title"></label>
+  <label>課題説明（学生に提示した問題文。提案機能・LLM評価の入力になります）
+    <textarea id="f-description" rows="6"></textarea></label>
+  <div class="row">
+    <label>提出ファイル名（任意）<input type="text" id="f-expected" placeholder="例: kadai3.py"></label>
+    <label>最大評点<input type="number" id="f-maxgrade" min="1" step="1"></label>
+    <label>重み: テスト<input type="number" id="f-wtests" min="0" max="1" step="0.05"></label>
+    <label>重み: ルーブリック<input type="number" id="f-wrubric" min="0" max="1" step="0.05"></label>
+    <label>タイムアウト(秒)<input type="number" id="f-timeout" min="1" step="1"></label>
+  </div>
+  <label class="check"><input type="checkbox" id="f-llm-enabled"> LLM評価を使う</label>
+  <label class="check"><input type="checkbox" id="f-similarity"> 類似提出の検出をレポートに含める</label>
+</section>
+
+<section class="card">
+  <h2>テストケース
+    <button class="small" onclick="addTestRow()">+ 行を追加</button>
+    <button class="small propose" data-target="tests" {% if not llm_available %}disabled title="APIキーが未設定です"{% endif %}>✨ テストケースを提案</button>
+  </h2>
+  <p class="muted">標準入出力テスト、または関数テスト（関数名を入れると args/expected を使用）。</p>
+  <table class="edit-table" id="tests-table">
+    <thead><tr>
+      <th>名前</th><th>標準入力</th><th>期待出力</th><th>照合</th>
+      <th>関数名</th><th>args(JSON)</th><th>期待値(JSON)</th><th>重み</th><th></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>ルーブリック（採点基準）
+    <button class="small" onclick="addRubricRow()">+ 行を追加</button>
+    <button class="small propose" data-target="rubric" {% if not llm_available %}disabled title="APIキーが未設定です"{% endif %}>✨ ルーブリックを提案</button>
+  </h2>
+  <table class="edit-table" id="rubric-table">
+    <thead><tr><th>id（英数字）</th><th>基準名</th><th>配点</th><th>説明</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>回答例（模範解答）
+    <button class="small propose" data-target="model_answer" {% if not llm_available %}disabled title="APIキーが未設定です"{% endif %}>✨ 回答例を提案</button>
+    <button class="small" id="btn-check">▶ 動作確認（テスト実行）</button>
+  </h2>
+  <textarea id="f-model-answer" rows="14" spellcheck="false" class="code"></textarea>
+  <div id="proposal-note" class="notice info" hidden></div>
+  <div id="check-results" hidden></div>
+</section>
+
+<section class="card">
+  <div class="row">
+    <label>LLMモデル<input type="text" id="f-llm-model"></label>
+  </div>
+  <button class="primary big" id="btn-save">💾 保存</button>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.PYGRADER = {
+    slug: {{ slug | tojson }},
+    assignment: {{ assignment_dict | tojson }},
+  };
+  initEditPage();
+</script>
+{% endblock %}

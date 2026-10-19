@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}課題一覧 — pygrader{% endblock %}
+{% block content %}
+<h1>課題一覧</h1>
+
+{% if not llm_available %}
+<div class="notice warn">
+  環境変数 <code>ANTHROPIC_API_KEY</code> が未設定です。提案機能とLLM評価は使えません（テストのみの採点は可能です）。
+</div>
+{% endif %}
+
+<form method="post" action="/assignments/new" class="inline-form">
+  <input type="text" name="title" placeholder="新しい課題のタイトル（例: 課題4: 繰り返し処理）" required>
+  <button type="submit" class="primary">課題を作成</button>
+</form>
+
+{% if assignments %}
+<table class="list">
+  <thead><tr><th>課題</th><th>テスト</th><th>ルーブリック</th><th>回答例</th><th></th></tr></thead>
+  <tbody>
+  {% for slug, a in assignments %}
+    <tr>
+      <td><a href="/assignments/{{ slug }}">{{ a.title }}</a></td>
+      <td>{{ a.tests | length }} 件</td>
+      <td>{{ a.rubric | length }} 基準</td>
+      <td>{{ "✅" if a.model_answer.strip() else "—" }}</td>
+      <td class="actions">
+        <a class="button" href="/assignments/{{ slug }}/grade">採点する</a>
+        <form method="post" action="/assignments/{{ slug }}/delete" class="inline"
+              onsubmit="return confirm('課題「{{ a.title }}」を削除しますか？（採点結果は残ります）')">
+          <button type="submit" class="danger">削除</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">まだ課題がありません。上のフォームから作成してください。</p>
+{% endif %}
+
+<h2>最近の採点結果</h2>
+{% if runs %}
+<ul class="run-list">
+  {% for run_id in runs %}
+  <li><a href="/runs/{{ run_id }}">{{ run_id }}</a></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">まだ採点を実行していません。</p>
+{% endif %}
+{% endblock %}
