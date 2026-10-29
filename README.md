@@ -135,3 +135,7 @@ data/       実行時データ（登録課題YAML・採点結果。gitには含�
 scripts/    フィクスチャ生成
 tests/      pytest一式
 ```
+
+## ライセンス
+
+MIT License（詳細は [LICENSE](LICENSE) を参照）
